@@ -1579,24 +1579,24 @@ void SPCFSImpl::setConstantVectorAndMuBlock()
             }
             else
             {
-							// contact constraint
-							if(ENABLE_CONTACT_DEPTH_CORRECTION)
-							{
-								double velOffset;
-								const double depth = constraint.depth - contactCorrectionDepth;
-								velOffset = contactCorrectionVelocityRatio * min(0.1,depth);
-							  //  if(depth <= 0.0){
-							  //      velOffset = contactCorrectionVelocityRatio * depth;
-							  //  } else {
-							  //      velOffset = contactCorrectionVelocityRatio * (-1.0 / (depth + 1.0) + 1.0);
-							  //  }
-								b(globalIndex) = an0(globalIndex) + (constraint.normalProjectionOfRelVelocityOn0 - velOffset) * dtinv;
-							} 
-							else
-							{
-							    b    (globalIndex) = an0(globalIndex) + constraint.normalProjectionOfRelVelocityOn0 * dtinv;/*** SHIORI of KIKUUWE **/
-							}
-							contactIndexToMu[globalIndex] = constraint.mu;
+              // contact constraint
+              if(ENABLE_CONTACT_DEPTH_CORRECTION)
+              {
+                double velOffset;
+                const double depth = constraint.depth - contactCorrectionDepth;
+                velOffset = contactCorrectionVelocityRatio * min(0.1,depth);
+                //  if(depth <= 0.0){
+                //      velOffset = contactCorrectionVelocityRatio * depth;
+                //  } else {
+                //      velOffset = contactCorrectionVelocityRatio * (-1.0 / (depth + 1.0) + 1.0);
+                //  }
+                b(globalIndex) = an0(globalIndex) + (constraint.normalProjectionOfRelVelocityOn0 - velOffset) * dtinv;
+              } 
+              else
+              {
+                  b    (globalIndex) = an0(globalIndex) + constraint.normalProjectionOfRelVelocityOn0 * dtinv;/*** SHIORI of KIKUUWE **/
+              }
+              contactIndexToMu[globalIndex] = constraint.mu;
 
                 int globalFrictionIndex = constraint.globalFrictionIndex;
                 for(int k=0; k < constraint.numFrictionVectors; ++k)
@@ -1619,7 +1619,8 @@ void SPCFSImpl::addConstraintForceToLinks()
     int n = constrainedLinkPairs.size();
     for(int i=0; i < n; ++i){
         LinkPair* linkPair = constrainedLinkPairs[i];
-        for(int j=0; j < 2; ++j){
+        for(int j=0; j < 2; ++j)
+        {
             // if(!linkPair->link[j]->isRoot() || linkPair->link[j]->jointType != Link::FIXED_JOINT){
             addConstraintForceToLink(linkPair, j);
             // }
