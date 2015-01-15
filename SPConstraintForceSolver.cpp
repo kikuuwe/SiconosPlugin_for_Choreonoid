@@ -377,7 +377,7 @@ public:
     }
     
 	bool kik_callSiconosSolver(MatrixX& Mlcp, VectorX& b, VectorX& solution, VectorX& contactIndexToMu);
-	void kik_NewBuffer(int aNC) ;
+	void kik_NewBuffer   (int aNC) ;
 	void kik_DeleteBuffer(int prv);
 	FrictionContactProblem kik_prob;
 	NumericsOptions  kik_numops;
@@ -1673,7 +1673,6 @@ SPConstraintForceSolver::SPConstraintForceSolver(SPWorldBase& world)
     impl = new SPCFSImpl(world);
 }
 
-
 SPConstraintForceSolver::~SPConstraintForceSolver()
 {
     delete impl;
@@ -1823,47 +1822,44 @@ void SPConstraintForceSolver::clearExternalForces()
 
 void SPCFSImpl::kik_NewBuffer(int NC)
 {
-	if(NC>0)
+	if(NC<=0) return;
+	int NC3= 3*NC;
+	
+	if( KIK_USE_FULL_MATRIX )
 	{
-		int NC3= 3*NC;
-		
-		if( KIK_USE_FULL_MATRIX )
-		{
-			kik_prob.q          = new double  [NC3 + NC + NC3 + NC3 + NC3 * NC3];
-			kik_prob.mu         = &(kik_prob.q[NC3                  ]);
-			kik_reaction        = &(kik_prob.q[NC3 + NC             ]);
-			kik_velocity        = &(kik_prob.q[NC3 + NC + NC3       ]);
-			kik_prob.M->matrix0 = &(kik_prob.q[NC3 + NC + NC3 + NC3 ]);
-		}
-		else
-		{
-			kik_prob.q                       = new double  [NC3 + NC + NC3 + NC3  + NC3 * NC3];
-			kik_prob.mu                      = &(kik_prob.q[NC3                  ]);
-			kik_reaction                     = &(kik_prob.q[NC3 + NC             ]);
-			kik_velocity                     = &(kik_prob.q[NC3 + NC + NC3       ]);
-			kik_prob.M->matrix1->block[0]    = &(kik_prob.q[NC3 + NC + NC3 + NC3 ]);
-			kik_prob.M->matrix1->block       = new double*[NC*NC  ];
-			kik_prob.M->matrix1->index1_data = new size_t [NC+1+NC*NC];
-			kik_prob.M->matrix1->blocksize0  = new unsigned int[NC]; 
-		}
+		kik_prob.q          = new double  [NC3 + NC + NC3 + NC3 + NC3 * NC3];
+		kik_prob.mu         = &(kik_prob.q[NC3                  ]);
+		kik_reaction        = &(kik_prob.q[NC3 + NC             ]);
+		kik_velocity        = &(kik_prob.q[NC3 + NC + NC3       ]);
+		kik_prob.M->matrix0 = &(kik_prob.q[NC3 + NC + NC3 + NC3 ]);
+		for(int i=0;i<NC3 + NC + NC3 + NC3 + NC3 * NC3;i++) kik_prob.q[i]=0;
+	}
+	else
+	{
+		kik_prob.M->matrix1->block       = new double*[NC*NC  ];
+		kik_prob.M->matrix1->index1_data = new size_t [NC+1+NC*NC];
+		kik_prob.M->matrix1->blocksize0  = new unsigned int[NC]; 
+		kik_prob.q                       = new double  [NC3 + NC + NC3 + NC3  + NC3 * NC3];
+		kik_prob.mu                      = &(kik_prob.q[NC3                  ]);
+		kik_reaction                     = &(kik_prob.q[NC3 + NC             ]);
+		kik_velocity                     = &(kik_prob.q[NC3 + NC + NC3       ]);
+		kik_prob.M->matrix1->block[0]    = &(kik_prob.q[NC3 + NC + NC3 + NC3 ]);
+		for(int i=0;i<NC3 + NC + NC3 + NC3  + NC3 * NC3;i++) kik_prob.q[i]=0;
 	}
 }
 void SPCFSImpl::kik_DeleteBuffer(int prv_sz)
 {
-	if(prv_sz>0)
+	if(prv_sz<=0) return;
+	if( KIK_USE_FULL_MATRIX )
 	{
-		if( KIK_USE_FULL_MATRIX )
-		{
-			delete [] kik_prob.q          ;
-		}
-		else
-		{
-			delete [] kik_prob.q          ;
-			delete [] kik_prob.M->matrix1->block;
-			delete [] kik_prob.M->matrix1->blocksize0;
-			delete [] kik_prob.M->matrix1->index1_data;
-	//		freeNumericMatrix(kik_prob.M);
-		}
+		delete [] kik_prob.q          ;
+	}
+	else
+	{
+		delete [] kik_prob.M->matrix1->block;
+		delete [] kik_prob.M->matrix1->blocksize0;
+		delete [] kik_prob.M->matrix1->index1_data;
+		delete [] kik_prob.q          ;
 	}
 }
 
