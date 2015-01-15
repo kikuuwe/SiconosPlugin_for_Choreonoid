@@ -1,4 +1,4 @@
-#  SiconosPlugin - a plugin for Choreonoid to provide access to Siconos-Numerics.
+#  SiconosPlugin_for_Choreonoid - a plugin for Choreonoid to provide access to Siconos-Numerics.
 #  
 #  Author: Shin'ichiro Nakaoka
 #  Author: Ryo Kikuuwe
@@ -27,10 +27,13 @@
 
 
 
-------------------------------------
-  README File for SiconosPlugin
-------------------------------------
+----------------------------------------------
+  README File for SiconosPlugin_for_Choreonoid
+----------------------------------------------
+
+These files should be placed in the directory
+   ext/SiconosPlugin/
+ 
 
 
-
-------------------------------------
+----------------------------------------------
