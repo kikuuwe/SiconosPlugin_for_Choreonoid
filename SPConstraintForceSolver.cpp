@@ -34,11 +34,10 @@
 #endif
 
 #include <cnoid/DyWorld>
+#include <cnoid/DyBody>
+#include <cnoid/LinkTraverse>
 #include <cnoid/ForwardDynamicsCBM>
 #include "SPConstraintForceSolver.h"
-
-#include <cnoid/LinkTraverse>
-#include <cnoid/DyBody>
 #include <cnoid/BodyCollisionDetectorUtil>
 #include <cnoid/IdPair>
 #include <cnoid/EigenUtil>
@@ -53,6 +52,7 @@
 #include <fstream>
 #include <iomanip>
 #include <boost/lexical_cast.hpp>
+
 #include "SiconosNumerics.h"
 #include "FrictionContact3D_compute_error.h"
 
@@ -63,7 +63,6 @@ using namespace cnoid;
 static const double VEL_THRESH_OF_DYNAMIC_FRICTION = 1.0e-4;
 
 static const bool SKIP_REDUNDANT_ACCEL_CALC = true;
-
 static const bool ASSUME_SYMMETRIC_MATRIX = true;
 
 static const int DEFAULT_MAX_NUM_GAUSS_SEIDEL_ITERATION = 1000;
@@ -76,7 +75,7 @@ static const double THRESH_TO_SWITCH_REL_ERROR = 1.0e-8;
 //static const double THRESH_TO_SWITCH_REL_ERROR = numeric_limits<double>::epsilon();
 
 
-static const bool ENABLE_CONTACT_DEPTH_CORRECTION = true; // KIKUUWE
+static const bool ENABLE_CONTACT_DEPTH_CORRECTION = true;
 
 // normal setting
 static const double DEFAULT_CONTACT_CORRECTION_DEPTH          = 0.0001;
@@ -116,10 +115,10 @@ static const Vector3 local2dConstraintPoints[3] = {
 };
 
 
-/**** KIKUUWE   ***/
+/**** SiconosPlugin   ***/
 typedef Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixX;
 typedef VectorXd VectorX;
-/**** KIKUUWE   ***/
+/**** SiconosPlugin   ***/
 
 
 namespace cnoid
@@ -152,6 +151,9 @@ public:
         int globalFrictionIndex;
         int numFrictionVectors;
         Vector3 frictionVector[4][2];
+        
+        double penaltyKpCoef ;
+        double penaltyKvCoef ;
     };
     typedef std::vector<ConstraintPoint> ConstraintPointArray;
 
@@ -167,6 +169,8 @@ public:
         int numberToCheckAccelCalcSkip;
         int parentIndex;
         DyLink* link;
+        
+        int penaltySpringCount; 
     };
     typedef std::vector<LinkData> LinkDataArray;
 
@@ -204,12 +208,12 @@ public:
         LinkData* linkData[2];
         ConstraintPointArray constraintPoints;
         bool isNonContactConstraint;
-        bool   isPenaltyBased;/* ADDED BY KIKUUWE */
         double muStatic;
         double muDynamic;
         double contactCullingDistance;
         double contactCullingDepth;
         double epsilon;
+        bool   isPenaltyBased;/* ADDED FOR PM */
     };
     typedef boost::shared_ptr<LinkPair> LinkPairPtr;
 
@@ -296,8 +300,8 @@ public:
     int numGaussSeidelTotalLoopsMax;
 
 
-    double penaltyKp;
-    double penaltyKv;
+    double penaltyKpCoef;
+    double penaltyKvCoef;
 
     void initBody(const DyBodyPtr& body, BodyData& bodyData);
     void initExtraJoints(int bodyIndex);
@@ -420,8 +424,8 @@ SPCFSImpl::SPCFSImpl(WorldBase& world) :
   isConstraintForceOutputMode = false;
   is2Dmode = false;
 
-  penaltyKp = 1000000.;
-  penaltyKv = 10000.  ;
+  penaltyKpCoef = 1;
+  penaltyKvCoef = 1;
 
 	kik_solops    = new SolverOptions;
 	kik_NewBuffer(0);
@@ -1831,21 +1835,21 @@ void SPConstraintForceSolver::setContactDepthCorrection(double depth, double vel
 }
 
 
-void SPConstraintForceSolver::setPenaltyKp(double aKp)
+void SPConstraintForceSolver::setPenaltyKpCoef(double aKpCoef)
 {
-    impl->penaltyKp = aKp;
+    impl->penaltyKpCoef = aKpCoef;
 }
-void SPConstraintForceSolver::setPenaltyKv(double aKv)
+void SPConstraintForceSolver::setPenaltyKvCoef(double aKvCoef)
 {
-    impl->penaltyKv = aKv;
+    impl->penaltyKvCoef = aKvCoef;
 }
-double SPConstraintForceSolver::penaltyKp()
+double SPConstraintForceSolver::penaltyKpCoef()
 {
-    return impl->penaltyKp;
+    return impl->penaltyKpCoef;
 }
-double SPConstraintForceSolver::penaltyKv()
+double SPConstraintForceSolver::penaltyKvCoef()
 {
-    return impl->penaltyKv;
+    return impl->penaltyKvCoef;
 }
 
 double SPConstraintForceSolver::contactCorrectionDepth()

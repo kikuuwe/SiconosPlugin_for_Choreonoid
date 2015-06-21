@@ -30,8 +30,8 @@
 
 
 
-#ifndef CNOID_SICONOSPLUGIN_SICONOS_SIMULATOR_ITEM_H_INCLUDED
-#define CNOID_SICONOSPLUGIN_SICONOS_SIMULATOR_ITEM_H_INCLUDED
+#ifndef CNOID_SICONOSPLUGIN_SP_SIMULATOR_ITEM_H_INCLUDED
+#define CNOID_SICONOSPLUGIN_SP_SIMULATOR_ITEM_H_INCLUDED
 
 #include <cnoid/SimulatorItem>
 #include <cnoid/EigenTypes>
@@ -50,7 +50,7 @@ public:
     virtual ~SPSimulatorItem();
 
     enum DynamicsMode { FORWARD_DYNAMICS = 0, HG_DYNAMICS, KINEMATICS, N_DYNAMICS_MODES };
-    enum IntegrationMode { EULER_INTEGRATION = 0, /* RUNGE_KUTTA_INTEGRATION,*/ N_INTEGRATION_MODES };
+    enum IntegrationMode { EULER_INTEGRATION = 0, RUNGE_KUTTA_INTEGRATION, N_INTEGRATION_MODES };
 
     void setDynamicsMode(int mode);
     void setIntegrationMode(int mode);

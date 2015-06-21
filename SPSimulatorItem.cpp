@@ -29,7 +29,6 @@
 */
 
 
-
 #include "SPSimulatorItem.h"
 #include "SPConstraintForceSolver.h"
 #include <cnoid/ForwardDynamicsCBM>
@@ -135,7 +134,6 @@ public:
 };
 }
 
-
 namespace cnoid {
   
 class SPSimulatorItemImpl
@@ -173,6 +171,10 @@ public:
 
     // for debug
     ofstream os;
+
+    double penaltyKpCoef;
+    double penaltyKvCoef;
+
 };
 
 }
@@ -220,6 +222,10 @@ SPSimulatorItemImpl::SPSimulatorItemImpl(SPSimulatorItem* self)
 
     isKinematicWalkingEnabled = false;
     is2Dmode = false;
+    
+    penaltyKpCoef = cfs.penaltyKpCoef();
+    penaltyKvCoef = cfs.penaltyKvCoef();
+    
 }
 
 
@@ -248,6 +254,9 @@ SPSimulatorItemImpl::SPSimulatorItemImpl(SPSimulatorItem* self, const SPSimulato
     epsilon = org.epsilon;
     isKinematicWalkingEnabled = org.isKinematicWalkingEnabled;
     is2Dmode = org.is2Dmode;
+
+    penaltyKpCoef = org.penaltyKpCoef;
+    penaltyKvCoef = org.penaltyKvCoef;
 }
 
 
@@ -405,6 +414,8 @@ bool SPSimulatorItemImpl::initializeSimulation(const std::vector<SimulationBody*
     if(is2Dmode){
         cfs.set2Dmode(true);
     }
+    cfs.setPenaltyKpCoef(penaltyKpCoef );
+    cfs.setPenaltyKvCoef(penaltyKvCoef );
 
     world.initialize();
 
@@ -512,16 +523,17 @@ void SPSimulatorItemImpl::doPutProperties(PutPropertyFunction& putProperty)
     putProperty.decimals(3).min(0.0);
     putProperty(_("Static friction"), staticFriction, changeProperty(staticFriction));
     putProperty(_("Slip friction"), slipFriction, changeProperty(slipFriction));
-    putProperty(_("Contact culling distance"), contactCullingDistance,
-                (boost::bind(&FloatingNumberString::setNonNegativeValue, boost::ref(contactCullingDistance), _1)));
+    putProperty(_("penaltyKpCoef"), penaltyKpCoef, changeProperty(penaltyKpCoef));
+    putProperty(_("penaltyKvCoef"), penaltyKvCoef, changeProperty(penaltyKvCoef));
+    putProperty(_("Contact culling distance"), contactCullingDistance,(boost::bind(&FloatingNumberString::setNonNegativeValue, boost::ref(contactCullingDistance), _1)));
     putProperty(_("Contact culling depth"), contactCullingDepth,
                 (boost::bind(&FloatingNumberString::setNonNegativeValue, boost::ref(contactCullingDepth), _1)));
     putProperty(_("Error criterion"), errorCriterion,
                 boost::bind(&FloatingNumberString::setPositiveValue, boost::ref(errorCriterion), _1));
     putProperty.min(1.0)(_("Max iterations"), maxNumIterations, changeProperty(maxNumIterations));
-    putProperty(_("CC depth"), contactCorrectionDepth,
+    putProperty(_("Contact correction depth"), contactCorrectionDepth,
                 boost::bind(&FloatingNumberString::setNonNegativeValue, boost::ref(contactCorrectionDepth), _1));
-    putProperty(_("CC v-ratio"), contactCorrectionVelocityRatio,
+    putProperty(_("Contact correction v-ratio"), contactCorrectionVelocityRatio,
                 boost::bind(&FloatingNumberString::setNonNegativeValue, boost::ref(contactCorrectionVelocityRatio), _1));
     putProperty(_("Kinematic walking"), isKinematicWalkingEnabled,
                 changeProperty(isKinematicWalkingEnabled));
@@ -551,6 +563,8 @@ bool SPSimulatorItemImpl::store(Archive& archive)
     archive.write("contactCorrectionVelocityRatio", contactCorrectionVelocityRatio);
     archive.write("kinematicWalking", isKinematicWalkingEnabled);
     archive.write("2Dmode", is2Dmode);
+    archive.write("penaltyKpCoef", penaltyKpCoef);
+    archive.write("penaltyKvCoef", penaltyKvCoef);
     return true;
 }
 
@@ -582,5 +596,7 @@ bool SPSimulatorItemImpl::restore(const Archive& archive)
     contactCorrectionVelocityRatio = archive.get("contactCorrectionVelocityRatio", contactCorrectionVelocityRatio.string());
     archive.read("kinematicWalking", isKinematicWalkingEnabled);
     archive.read("2Dmode", is2Dmode);
+    archive.read("penaltyKpCoef", penaltyKpCoef);
+    archive.read("penaltyKvCoef", penaltyKvCoef);
     return true;
 }
