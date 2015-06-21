@@ -10,11 +10,7 @@ set(target CnoidSiconosPlugin)
 set(sources
   SiconosPlugin.cpp
   SPSimulatorItem.cpp
-  SPWorld.cpp
   SPConstraintForceSolver.cpp
-  SPForwardDynamics.cpp
-  SPForwardDynamicsABM.cpp
-  SPForwardDynamicsCBM.cpp
   )
 
 set(headers

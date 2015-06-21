@@ -33,8 +33,8 @@
 #define NOMINMAX
 #endif
 
-#include "SPWorld.h"
-#include "SPForwardDynamicsCBM.h"
+#include <cnoid/DyWorld>
+#include <cnoid/ForwardDynamicsCBM>
 #include "SPConstraintForceSolver.h"
 
 #include <cnoid/LinkTraverse>
@@ -128,14 +128,14 @@ class SPCFSImpl
 {
 public:
 
-    SPCFSImpl(SPWorldBase& world);
+    SPCFSImpl(WorldBase& world);
     ~SPCFSImpl();
 
     void initialize(void);
     void solve();
     inline void clearExternalForces();
 
-    SPWorldBase& world;
+    WorldBase& world;
 
     bool isConstraintForceOutputMode;
         
@@ -188,7 +188,7 @@ public:
            The pointer is null when all the joints are torque mode and
            the forward dynamics is calculated by ABM.
         */
-        SPForwardDynamicsCBMPtr forwardDynamicsCBM;
+        ForwardDynamicsCBMPtr forwardDynamicsCBM;
     };
 
     std::vector<BodyData> bodiesData;
@@ -204,6 +204,7 @@ public:
         LinkData* linkData[2];
         ConstraintPointArray constraintPoints;
         bool isNonContactConstraint;
+        bool   isPenaltyBased;/* ADDED BY KIKUUWE */
         double muStatic;
         double muDynamic;
         double contactCullingDistance;
@@ -294,6 +295,10 @@ public:
     int numGaussSeidelTotalCalls;
     int numGaussSeidelTotalLoopsMax;
 
+
+    double penaltyKp;
+    double penaltyKv;
+
     void initBody(const DyBodyPtr& body, BodyData& bodyData);
     void initExtraJoints(int bodyIndex);
     void init2Dconstraint(int bodyIndex);
@@ -379,11 +384,11 @@ public:
 	bool kik_callSiconosSolver(MatrixX& Mlcp, VectorX& b, VectorX& solution, VectorX& contactIndexToMu);
 	void kik_NewBuffer   (int aNC) ;
 	void kik_DeleteBuffer(int prv);
-	FrictionContactProblem kik_prob;
-	NumericsOptions  kik_numops;
-	double          *kik_reaction  ;
-	double          *kik_velocity  ;
-	SolverOptions   *kik_solops    ;
+	FrictionContactProblem  kik_prob;
+	NumericsOptions         kik_numops;
+	double                 *kik_reaction  ;
+	double                 *kik_velocity  ;
+	SolverOptions          *kik_solops    ;
  
 };
 /*
@@ -396,7 +401,7 @@ public:
 
 
 
-SPCFSImpl::SPCFSImpl(SPWorldBase& world) :
+SPCFSImpl::SPCFSImpl(WorldBase& world) :
     world(world),
     randomAngle(boost::mt19937(), boost::uniform_real<>(0.0, 2.0 * PI))
 {
@@ -414,6 +419,10 @@ SPCFSImpl::SPCFSImpl(SPWorldBase& world) :
 
   isConstraintForceOutputMode = false;
   is2Dmode = false;
+
+  penaltyKp = 1000000.;
+  penaltyKv = 10000.  ;
+
 	kik_solops    = new SolverOptions;
 	kik_NewBuffer(0);
 	kik_prob.dimension    = 3;
@@ -595,7 +604,7 @@ void SPCFSImpl::initialize(void)
         initBody(body, bodyData);
 
         bodyData.forwardDynamicsCBM =
-            dynamic_pointer_cast<SPForwardDynamicsCBM>(world.forwardDynamics(bodyIndex));
+            dynamic_pointer_cast<ForwardDynamicsCBM>(world.forwardDynamics(bodyIndex));
 
         if(bodyData.isStatic && !(bodyData.forwardDynamicsCBM)){
             LinkDataArray& linksData = bodyData.linksData;
@@ -719,6 +728,10 @@ void SPCFSImpl::solve()
             addConstraintForceToLinks();
         }
     }
+    else
+    {
+			addConstraintForceToLinks();/**/
+		}
     prevGlobalNumConstraintVectors = globalNumConstraintVectors;
     prevGlobalNumFrictionVectors   = globalNumFrictionVectors;
 }
@@ -747,17 +760,24 @@ void SPCFSImpl::extractConstraintPoints(const CollisionPair& collisionPair)
     const IdPair<> idPair(collisionPair.geometryId);
     GeometryPairToLinkPairMap::iterator p = geometryPairToLinkPairMap.find(idPair);
     
-    if(p != geometryPairToLinkPairMap.end()){
+    if(p != geometryPairToLinkPairMap.end())
+    {
         pLinkPair = &p->second;
         pLinkPair->constraintPoints.clear();
-    } else {
+    }
+    else
+    {
         LinkPair& linkPair = geometryPairToLinkPairMap.insert(make_pair(idPair, LinkPair())).first->second;
-        
-        for(int i=0; i < 2; ++i){
+        linkPair.isPenaltyBased = false;
+        for(int i=0; i < 2; ++i)
+        {
             const int id = collisionPair.geometryId[i];
             const int bodyIndex = geometryIdToBodyIndexMap[id];
             linkPair.bodyIndex[i] = bodyIndex;
             BodyData& bodyData = bodiesData[bodyIndex];
+            
+            const char * tmp = bodyData.body->name().c_str();
+            if( tmp[0]=='P' ) linkPair.isPenaltyBased = true;
             linkPair.bodyData[i] = &bodyData;
             const int linkIndex = id - bodyData.geometryId;
             linkPair.link[i] = bodyData.body->link(linkIndex);
@@ -793,7 +813,8 @@ bool SPCFSImpl::setContactConstraintPoint(LinkPair& linkPair, const Collision& c
 {
     // skip the contact which has too much depth
     if(collision.depth > linkPair.contactCullingDepth)  return false;
-    
+ //   if(linkPair.isPenaltyBased) return false;
+
     ConstraintPointArray& constraintPoints = linkPair.constraintPoints;
     constraintPoints.push_back(ConstraintPoint());
     ConstraintPoint& contact = constraintPoints.back();
@@ -810,11 +831,12 @@ bool SPCFSImpl::setContactConstraintPoint(LinkPair& linkPair, const Collision& c
             return false;
         }
     }
-
+		
     contact.normalTowardInside[1] = collision.normal;
     contact.normalTowardInside[0] = -contact.normalTowardInside[1];
     contact.depth = collision.depth;
-    contact.globalIndex = globalNumConstraintVectors++;
+    if(linkPair.isPenaltyBased) contact.globalIndex = globalNumConstraintVectors;
+    else                        contact.globalIndex = globalNumConstraintVectors++;
 
     // check velocities
     Vector3 v[2];
@@ -1137,8 +1159,10 @@ void SPCFSImpl::setAccelerationMatrix()
     for(size_t i=0; i < constrainedLinkPairs.size(); ++i){
 
         LinkPair& linkPair = *constrainedLinkPairs[i];
-        int numConstraintsInPair = linkPair.constraintPoints.size();
+        
+        if(linkPair.isPenaltyBased) continue;/***/
 
+        int numConstraintsInPair = linkPair.constraintPoints.size();
         for(int j=0; j < numConstraintsInPair; ++j){
 
             ConstraintPoint& constraint = linkPair.constraintPoints[j];
@@ -1555,11 +1579,12 @@ void SPCFSImpl::setConstantVectorAndMuBlock()
     const int block2 = globalNumConstraintVectors;
     const int block3 = globalNumConstraintVectors + globalNumFrictionVectors;
 
-    for(size_t i=0; i < constrainedLinkPairs.size(); ++i){
-
-        LinkPair& linkPair = *constrainedLinkPairs[i];
-        int numConstraintsInPair = linkPair.constraintPoints.size();
-
+ 
+    for(size_t i=0; i < constrainedLinkPairs.size(); ++i)
+    {
+       LinkPair& linkPair = *constrainedLinkPairs[i];
+       if(linkPair.isPenaltyBased) continue;/***/
+       int numConstraintsInPair = linkPair.constraintPoints.size();
         for(int j=0; j < numConstraintsInPair; ++j)
         {
             ConstraintPoint& constraint = linkPair.constraintPoints[j];
@@ -1594,7 +1619,7 @@ void SPCFSImpl::setConstantVectorAndMuBlock()
               } 
               else
               {
-                  b    (globalIndex) = an0(globalIndex) + constraint.normalProjectionOfRelVelocityOn0 * dtinv;/*** SHIORI of KIKUUWE **/
+                  b    (globalIndex) = an0(globalIndex) + constraint.normalProjectionOfRelVelocityOn0 * dtinv;
               }
               contactIndexToMu[globalIndex] = constraint.mu;
 
@@ -1637,31 +1662,59 @@ void SPCFSImpl::addConstraintForceToLink(LinkPair* linkPair, int ipair)
     ConstraintPointArray& constraintPoints = linkPair->constraintPoints;
     int numConstraintPoints = constraintPoints.size();
     DyLink* link = linkPair->link[ipair];
-
-    for(int i=0; i < numConstraintPoints; ++i){
-
-        ConstraintPoint& constraint = constraintPoints[i];
-        int globalIndex = constraint.globalIndex;
-
-        Vector3 f = solution(globalIndex) * constraint.normalTowardInside[ipair];
-
-        for(int j=0; j < constraint.numFrictionVectors; ++j){
-            f += solution(globalNumConstraintVectors + constraint.globalFrictionIndex + j) * constraint.frictionVector[j][ipair];
-        }
-
-        f_total   += f;
-        tau_total += constraint.point.cross(f);
-
-        if(isConstraintForceOutputMode){
-            link->constraintForces().push_back(DyLink::ConstraintForce(constraint.point, f));
-        }
-    }
     
+    if(linkPair->isPenaltyBased)
+    {
+				for(int i=0; i < numConstraintPoints; ++i)
+				{
+				    ConstraintPoint& constraint = constraintPoints[i];
+				   	double kp = 1000000./numConstraintPoints;
+						double kd = 10000.  /numConstraintPoints; 
+				    double vn((ipair == 0) ? constraint.normalProjectionOfRelVelocityOn0 : -constraint.normalProjectionOfRelVelocityOn0);
+				    double fn(constraint.depth * kp - vn * kd);
+				    Vector3 f(fn * constraint.normalTowardInside[ipair]);
+
+				    if(fn > 0.0)
+				    {
+				        //for(int j=0; j < constraint.numFrictionVectors; ++j){
+				        Vector3 v(constraint.relVelocityOn0 - constraint.normalProjectionOfRelVelocityOn0 * constraint.normalTowardInside[1]);
+				        //cout << constraint.relVelocityOn0 << " ";
+				        if(ipair == 0) v = -v;
+				        double s = sqrt(v.dot(v));//norm2(v);
+				        if(s < 1.0e-3) f += - (v / 1.0e-3) * fn * constraint.mu;
+				        else           f += - (v / s     ) * fn * constraint.mu;
+				        //}
+				    }
+				    f_total += f;
+				    tau_total += constraint.point.cross(f);
+				}
+		}
+		else 
+		{
+	    for(int i=0; i < numConstraintPoints; ++i){
+
+	        ConstraintPoint& constraint = constraintPoints[i];
+	        int globalIndex = constraint.globalIndex;
+
+	        Vector3 f = solution(globalIndex) * constraint.normalTowardInside[ipair];
+
+	        for(int j=0; j < constraint.numFrictionVectors; ++j){
+	            f += solution(globalNumConstraintVectors + constraint.globalFrictionIndex + j) * constraint.frictionVector[j][ipair];
+	        }
+	        f_total   += f;
+	        tau_total += constraint.point.cross(f);
+	        if(isConstraintForceOutputMode){
+	            link->constraintForces().push_back(DyLink::ConstraintForce(constraint.point, f));
+	        }
+	    }
+		}
+////////////////////////////////////////////////////////////////////
+
     link->f_ext()   += f_total;
     link->tau_ext() += tau_total;
 
-
-    if(CFS_DEBUG){
+    if(CFS_DEBUG)
+    {
         os << "Constraint force to " << link->name() << ": f = " << f_total << ", tau = " << tau_total << std::endl;
     }
 }
@@ -1669,7 +1722,7 @@ void SPCFSImpl::addConstraintForceToLink(LinkPair* linkPair, int ipair)
 
 
 
-SPConstraintForceSolver::SPConstraintForceSolver(SPWorldBase& world)
+SPConstraintForceSolver::SPConstraintForceSolver(WorldBase& world)
 {
     impl = new SPCFSImpl(world);
 }
@@ -1778,6 +1831,23 @@ void SPConstraintForceSolver::setContactDepthCorrection(double depth, double vel
 }
 
 
+void SPConstraintForceSolver::setPenaltyKp(double aKp)
+{
+    impl->penaltyKp = aKp;
+}
+void SPConstraintForceSolver::setPenaltyKv(double aKv)
+{
+    impl->penaltyKv = aKv;
+}
+double SPConstraintForceSolver::penaltyKp()
+{
+    return impl->penaltyKp;
+}
+double SPConstraintForceSolver::penaltyKv()
+{
+    return impl->penaltyKv;
+}
+
 double SPConstraintForceSolver::contactCorrectionDepth()
 {
     return impl->contactCorrectionDepth;
@@ -1819,7 +1889,7 @@ void SPConstraintForceSolver::clearExternalForces()
     impl->clearExternalForces();
 }
 
-
+/********************************************************************************************************/
 
 void SPCFSImpl::kik_NewBuffer(int NC)
 {
@@ -1864,7 +1934,7 @@ void SPCFSImpl::kik_DeleteBuffer(int prv_sz)
 	}
 }
 
-int kik_g_check_zero_block(MatrixX& Mlcp, int NC, int ia,int ja)
+int SPGlobal_check_zero_block(MatrixX& Mlcp, int NC, int ia,int ja)
 {
 	for(int i = 0; i<3; i++)for(int j = 0; j<3; j++)
 	{
@@ -1876,7 +1946,7 @@ int kik_g_check_zero_block(MatrixX& Mlcp, int NC, int ia,int ja)
 	return 0;
 }
 
-int kik_g_construct_sparsity_matrix(int * ibuf, MatrixX& Mlcp, int NC)
+int SPGlobal_construct_sparsity_matrix(int * ibuf, MatrixX& Mlcp, int NC)
 {
 	int count=0;
 	for(int ia = 0; ia<NC; ia++)for(int ja = ia; ja<NC; ja++) 
@@ -1884,7 +1954,7 @@ int kik_g_construct_sparsity_matrix(int * ibuf, MatrixX& Mlcp, int NC)
 		if(ia==ja){ibuf[NC*ia+ja]=1; count ++;}
 		else
 		{
-			int tmp = kik_g_check_zero_block(Mlcp,NC,ia,ja)  ;
+			int tmp = SPGlobal_check_zero_block(Mlcp,NC,ia,ja)  ;
 			ibuf[NC*ia+ja]= ibuf[NC*ja+ia]= tmp;
 			if(tmp==1) count += 2;
 		}
@@ -1893,7 +1963,7 @@ int kik_g_construct_sparsity_matrix(int * ibuf, MatrixX& Mlcp, int NC)
 }
 
 
-void kik_g_check_offdiag(const int * ibuf, int NC, int* pia2, int *pja2)
+void SPGlobal_check_offdiag(const int * ibuf, int NC, int* pia2, int *pja2)
 {
 	(*pia2)=(*pja2)=NC;
 	for(int k = 0; k<NC; k++)
@@ -1904,7 +1974,7 @@ void kik_g_check_offdiag(const int * ibuf, int NC, int* pia2, int *pja2)
 	}
 }
 
-void kik_g_sparsify_A(SparseBlockStructuredMatrix* pmat, MatrixX& Mlcp      , int NC, ofstream* pos);
+void SPGlobal_sparsify_A(SparseBlockStructuredMatrix* pmat, MatrixX& Mlcp      , int NC, ofstream* pos);
 
 bool SPCFSImpl::kik_callSiconosSolver(MatrixX& Mlcp, VectorX& b, VectorX& solution, VectorX& contactIndexToMu)
 {
@@ -1916,8 +1986,8 @@ bool SPCFSImpl::kik_callSiconosSolver(MatrixX& Mlcp, VectorX& b, VectorX& soluti
 		if(       b.rows()!= NC3){ os << "   warning-2 " << std::endl;return false;}
 		if(solution.rows()!= NC3){ os << "   warning-3 " << std::endl;return false;}
 	} 
-	for(int ia=0;ia<NC;ia++)for(int i=0;i<3;i ++)kik_prob.q [3*ia+i]= b(((i==0)?(ia):(2*ia+i+NC-1)));
-	for(int ia=0;ia<NC;ia++)                     kik_prob.mu[  ia  ]= contactIndexToMu[ia];
+	for(int ia=0;ia<NC;ia++)for(int i=0;i<3;i++)kik_prob.q [3*ia+i]= b(((i==0)?(ia):(2*ia+i+NC-1)));
+	for(int ia=0;ia<NC;ia++)                    kik_prob.mu[  ia  ]= contactIndexToMu[ia];
 	kik_prob.numberOfContacts = NC;
 
 	if( KIK_USE_FULL_MATRIX )
@@ -1938,7 +2008,7 @@ bool SPCFSImpl::kik_callSiconosSolver(MatrixX& Mlcp, VectorX& b, VectorX& soluti
 		kik_prob.M->storageType = 1;
 		kik_prob.M->size0       = NC3;
 		kik_prob.M->size1       = NC3;
-		kik_g_sparsify_A( kik_prob.M->matrix1 , Mlcp , NC , &os);
+		SPGlobal_sparsify_A( kik_prob.M->matrix1 , Mlcp , NC , &os);
 	}
 	
 	frictionContact3D_driver(&kik_prob,kik_reaction,kik_velocity,kik_solops, &kik_numops);
@@ -1953,12 +2023,12 @@ bool SPCFSImpl::kik_callSiconosSolver(MatrixX& Mlcp, VectorX& b, VectorX& soluti
 	return true;
 }
 
-void kik_g_copy_block(double * bbuf, MatrixX& Mlcp, int NC, int ia,int ja)
+void SPGlobal_copy_block(double * bbuf, MatrixX& Mlcp, int NC, int ia,int ja)
 {
 	for(int i=0;i<3;i++)for(int j=0;j<3;j++) bbuf[3*j+i]= Mlcp(((i==0)?(ia):(2*ia+i+NC-1)),((j==0)?(ja):(2*ja+j+NC-1))) ;
 }
 
-void kik_g_sparsify_A(SparseBlockStructuredMatrix* pmat, MatrixX& Mlcp, int NC, ofstream* pos )
+void SPGlobal_sparsify_A(SparseBlockStructuredMatrix* pmat, MatrixX& Mlcp, int NC, ofstream* pos )
 {
 	SparseBlockStructuredMatrix& mat = *pmat;
 	mat.index2_data = mat.index1_data + (NC+1); 
@@ -1969,10 +2039,10 @@ void kik_g_sparsify_A(SparseBlockStructuredMatrix* pmat, MatrixX& Mlcp, int NC, 
 		mat.index1_data[ia+1]=mat.index1_data[ia];
 		for(int ja=0;ja<NC;ja++)
 		{
-			if(kik_g_check_zero_block(Mlcp,NC,ia,ja)==1)
+			if(SPGlobal_check_zero_block(Mlcp,NC,ia,ja)==1)
 			{
 				mat.block[NB] = mat.block[0]+(9*NB);
-				kik_g_copy_block(mat.block[NB], Mlcp, NC,ia,ja);
+				SPGlobal_copy_block(mat.block[NB], Mlcp, NC,ia,ja);
 				mat.index1_data[ia+1] ++ ;
 				mat.index2_data[NB] = ja;
 				NB++;
@@ -1989,7 +2059,7 @@ void kik_g_sparsify_A(SparseBlockStructuredMatrix* pmat, MatrixX& Mlcp, int NC, 
   if(CFS_DEBUG)
   {
 		int* ibuf = new int[NC*NC];
-		kik_g_construct_sparsity_matrix(ibuf,Mlcp,NC);
+		SPGlobal_construct_sparsity_matrix(ibuf,Mlcp,NC);
 		(*pos) << "=---------------------------------="<< std::endl; 
 		(*pos) << "const int NC=" << NC << ";"<< std::endl; 
 		(*pos) << "const int NB=" << NB << ";"<< std::endl; 
@@ -1997,6 +2067,5 @@ void kik_g_sparsify_A(SparseBlockStructuredMatrix* pmat, MatrixX& Mlcp, int NC, 
 		(*pos) << "=---------------------------------="<< std::endl; 
 		delete [] ibuf;
 	}
-
 }
 

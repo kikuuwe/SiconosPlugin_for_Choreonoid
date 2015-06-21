@@ -32,8 +32,8 @@
 
 #include "SPSimulatorItem.h"
 #include "SPConstraintForceSolver.h"
-#include "SPForwardDynamicsCBM.h"
-#include "SPWorld.h"
+#include <cnoid/ForwardDynamicsCBM>
+#include <cnoid/DyWorld>
 
 #include <cnoid/ItemManager>
 #include <cnoid/Archive>
@@ -143,7 +143,7 @@ class SPSimulatorItemImpl
 public:
     SPSimulatorItem* self;
 
-    SPWorld<SPConstraintForceSolver> world;
+    World<SPConstraintForceSolver> world;
         
     Selection dynamicsMode;
     Selection integrationMode;
@@ -440,7 +440,7 @@ void SPSimulatorItemImpl::addBody(SimulationBody* simBody)
     body->calcForwardKinematics(true, true);
 
     if(isHighGainMode){
-        SPForwardDynamicsCBMPtr cbm = make_shared_aligned<SPForwardDynamicsCBM>(body);
+        ForwardDynamicsCBMPtr cbm = make_shared_aligned<ForwardDynamicsCBM>(body);
         cbm->setHighGainModeForAllJoints();
         bodyIndexMap[body] = world.addBody(body, cbm);
     } else {

@@ -37,7 +37,7 @@ namespace cnoid
 {
 class Link;
 class SPCFSImpl;
-class SPWorldBase;
+class WorldBase;
 class CollisionDetector;
 typedef boost::shared_ptr<CollisionDetector> CollisionDetectorPtr;
 
@@ -46,7 +46,7 @@ class SPConstraintForceSolver
     SPCFSImpl* impl;
 
 public:
-    SPConstraintForceSolver(SPWorldBase& world);
+    SPConstraintForceSolver(WorldBase& world);
     ~SPConstraintForceSolver();
 
     void setCollisionDetector(CollisionDetectorPtr detector);
@@ -78,6 +78,10 @@ public:
     void set2Dmode(bool on);
     void enableConstraintForceOutput(bool on);
 
+    double penaltyKp();
+    double penaltyKv();
+    void setPenaltyKp(double aKp);
+    void setPenaltyKv(double aKv);
 
     void initialize(void);
     void solve();
