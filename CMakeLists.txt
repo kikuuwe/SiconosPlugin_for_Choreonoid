@@ -11,6 +11,7 @@ set(sources
   SiconosPlugin.cpp
   SPSimulatorItem.cpp
   SPConstraintForceSolver.cpp
+  SPCore.cpp
   )
 
 set(headers
