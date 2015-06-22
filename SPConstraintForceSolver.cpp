@@ -619,9 +619,9 @@ inline void SPCFSImpl::clearExternalForces()
 {
     for(size_t i=0; i < bodiesData.size(); ++i){
         BodyData& bodyData = bodiesData[i];
-        if(bodyData.hasConstrainedLinks){
+       // if(bodyData.hasConstrainedLinks){
             bodyData.body->clearExternalForces();
-        }
+       // }
     }
 }
 
@@ -770,9 +770,11 @@ void SPCFSImpl::extractConstraintPoints(const CollisionPair& collisionPair)
         linkPair.epsilon = defaultCoefficientOfRestitution;
         pLinkPair = &linkPair;
     }
-    pLinkPair->bodyData[0]->hasConstrainedLinks = true;
-    pLinkPair->bodyData[1]->hasConstrainedLinks = true;
-    
+    if(!pLinkPair->isPenaltyBased)
+    {
+        pLinkPair->bodyData[0]->hasConstrainedLinks = true;
+        pLinkPair->bodyData[1]->hasConstrainedLinks = true;
+    }
     const vector<Collision>& collisions = collisionPair.collisions;
     for(size_t i=0; i < collisions.size(); ++i){
         setContactConstraintPoint(*pLinkPair, collisions[i]);
@@ -1757,6 +1759,8 @@ double SPConstraintForceSolver::coefficientOfRestitution() const
 void SPConstraintForceSolver::setGaussSeidelErrorCriterion(double e)
 {
     impl->gaussSeidelErrorCriterion = e;
+    impl->pSPCore-> kik_solops->dparam[0]                  = e;
+    impl->pSPCore-> kik_solops->internalSolvers->dparam[0] = e;
 }
 
 
@@ -1769,6 +1773,8 @@ double SPConstraintForceSolver::gaussSeidelErrorCriterion()
 void SPConstraintForceSolver::setGaussSeidelMaxNumIterations(int n)
 {
     impl->maxNumGaussSeidelIteration = n;
+    impl->pSPCore-> kik_solops->iparam[0]                  = n;
+    impl->pSPCore-> kik_solops->internalSolvers->iparam[0] = n;
 }
 
 
@@ -1867,7 +1873,6 @@ void SPCFSImpl::addPenaltyForceToLink(LinkPair* linkPair, int ipair)
     int numConstraintPoints = constraintPoints.size();
     DyLink* link = linkPair->link[ipair];
     double T  = world.timeStep();
-
     for(int i=0; i < numConstraintPoints; ++i) 
     {
         ConstraintPoint& constraint = constraintPoints[i];

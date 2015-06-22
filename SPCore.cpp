@@ -39,7 +39,7 @@ using namespace cnoid;
 
 SPCore::SPCore(int maxNumGaussSeidelIteration, double gaussSeidelErrorCriterion)
 {
-    USE_FULL_MATRIX = false;
+    USE_FULL_MATRIX = true;
     kik_prob      = new FrictionContactProblem;
     kik_numops    = new NumericsOptions       ;
     kik_solops    = new SolverOptions         ;
@@ -50,8 +50,8 @@ SPCore::SPCore(int maxNumGaussSeidelIteration, double gaussSeidelErrorCriterion)
     kik_numops->verboseMode = 0;  /*************/
 //  SICONOS_FRICTION_3D_projectionOnCylinder;
     frictionContact3D_setDefaultSolverOptions(kik_solops, SICONOS_FRICTION_3D_NSGS   );
-    kik_solops->iparam[0] = maxNumGaussSeidelIteration;
 //  kik_solops->iparam[1] = 1; // This makes computation slower
+    kik_solops->iparam[0] = maxNumGaussSeidelIteration;
     kik_solops->dparam[0] = gaussSeidelErrorCriterion;//1e-10;
     kik_solops->internalSolvers->iparam[0] = maxNumGaussSeidelIteration;
     kik_solops->internalSolvers->dparam[0] = gaussSeidelErrorCriterion;
@@ -112,9 +112,10 @@ void SPCore::kik_DeleteBuffer()
   kik_prob->q = 0;
 }
 
-bool SPCore::callSiconosSolver(MatrixX& Mlcp, VectorX& b, VectorX& solution, VectorX& contactIndexToMu,ofstream& os)
+bool SPCore::callSiconosSolver(MatrixX& Mlcp, VectorX& b, VectorX& solution, VectorX& contactIndexToMu, ofstream& os)
 {
   int NC3 = Mlcp.rows();
+  if(NC3<=0) return true;
   int NC = NC3/3;
   int CFS_DEBUG = 0;
   int CFS_DEBUG_VERBOSE = 0;
@@ -133,11 +134,12 @@ bool SPCore::callSiconosSolver(MatrixX& Mlcp, VectorX& b, VectorX& solution, Vec
     kik_prob->M->storageType = 0;
     kik_prob->M->size0       = NC3;
     kik_prob->M->size1       = NC3;
+    double* ptmp = kik_prob->M->matrix0 ;
     for(int ia=0;ia<NC;ia++)for(int i =0;i <3 ;i ++)
     {
       for(int ja=0;ja<NC;ja++)for(int j =0;j <3;j ++) 
       {
-        kik_prob->M->matrix0[NC3*(3*ia+i)+(3*ja+j)]=Mlcp(((i==0)?(ia):(2*ia+i+NC-1)),((j==0)?(ja):(2*ja+j+NC-1)));
+        ptmp[NC3*(3*ia+i)+(3*ja+j)]=Mlcp(((i==0)?(ia):(2*ia+i+NC-1)),((j==0)?(ja):(2*ja+j+NC-1)));
       }
     }
   }
@@ -151,7 +153,8 @@ bool SPCore::callSiconosSolver(MatrixX& Mlcp, VectorX& b, VectorX& solution, Vec
   
   frictionContact3D_driver(kik_prob,kik_reaction,kik_velocity,kik_solops, kik_numops);
   
-  for(int ia=0;ia<NC;ia++)for(int i=0;i<3;i++) solution(((i==0)?(ia):(2*ia+i+NC-1))) = kik_reaction[3*ia+i] ;
+  double* prea = kik_reaction ;
+  for(int ia=0;ia<NC;ia++)for(int i=0;i<3;i++) solution(((i==0)?(ia):(2*ia+i+NC-1))) = prea[3*ia+i] ;
   if(CFS_DEBUG_VERBOSE)
   {
     os << "=---------------------------------="<< std::endl; 
