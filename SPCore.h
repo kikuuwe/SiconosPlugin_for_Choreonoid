@@ -52,13 +52,13 @@ class SPCore
     typedef VectorXd VectorX;
   
     bool USE_FULL_MATRIX ;
-    void kik_NewBuffer   (int aNC) ;
-    void kik_DeleteBuffer();
-    FrictionContactProblem *kik_prob      ;
-    NumericsOptions        *kik_numops    ;
-    SolverOptions          *kik_solops    ;
-    double                 *kik_reaction  ;
-    double                 *kik_velocity  ;
+    void NewBuffer   (int aNC) ;
+    void DeleteBuffer();
+    FrictionContactProblem *prob      ;
+    NumericsOptions        *numops    ;
+    SolverOptions          *solops    ;
+    double                 *reaction  ;
+    double                 *velocity  ;
   
     SPCore(int maxNumGaussSeidelIteration, double gaussSeidelErrorCriterion);
     ~SPCore();

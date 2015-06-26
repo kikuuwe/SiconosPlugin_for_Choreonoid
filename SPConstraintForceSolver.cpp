@@ -61,8 +61,8 @@ using namespace cnoid;
 
 static const double VEL_THRESH_OF_DYNAMIC_FRICTION = 1.0e-4;
 
-static const bool SKIP_REDUNDANT_ACCEL_CALC = false;
-static const bool ASSUME_SYMMETRIC_MATRIX = true;
+static const bool SKIP_REDUNDANT_ACCEL_CALC = true;
+static const bool ASSUME_SYMMETRIC_MATRIX = false;
 
 static const int DEFAULT_MAX_NUM_GAUSS_SEIDEL_ITERATION = 1000;
 
@@ -77,13 +77,13 @@ static const double THRESH_TO_SWITCH_REL_ERROR = 1.0e-8;
 static const bool ENABLE_CONTACT_DEPTH_CORRECTION = true;
 
 // normal setting
-static const double DEFAULT_CONTACT_CORRECTION_DEPTH          = 0.0001;
+static const double DEFAULT_CONTACT_CORRECTION_DEPTH = 0.0001;
 //static const double PENETRATION_A = 500.0;
 //static const double PENETRATION_B = 80.0;
 static const double DEFAULT_CONTACT_CORRECTION_VELOCITY_RATIO = 1.0;
 
-static const double DEFAULT_CONTACT_CULLING_DISTANCE          = 0.005;
-static const double DEFAULT_CONTACT_CULLING_DEPTH             = 0.05;
+static const double DEFAULT_CONTACT_CULLING_DISTANCE = 0.005;
+static const double DEFAULT_CONTACT_CULLING_DEPTH = 0.05;
 
 
 // test for mobile robots with wheels
@@ -373,6 +373,7 @@ public:
 
     double penaltyKpCoef;
     double penaltyKvCoef;
+    double penaltySizeRatio;
 
     static Vector3 kkwsat(double a, const Vector3& x)
     {
@@ -382,17 +383,11 @@ public:
     }
     static double kkwmin(double a, double b){if(a>b) return b; return a;}
     static double kkwmax(double a, double b){if(a<b) return b; return a;}
+    static double kkwmin(Vector3 a){return kkwmin(kkwmin(a(0),a(1)),a(2));}
     void addPenaltyForceToLinks();
     void addPenaltyForceToLink(LinkPair* linkPair, int ipair);
-
     SPCore* pSPCore; 
 };
-/*
-  #ifdef _MSC_VER
-  const double SPCFSImpl::PI   = 3.14159265358979323846;
-  const double SPCFSImpl::PI_2 = 1.57079632679489661923;
-  #endif
-*/
 };
 
 
@@ -415,10 +410,11 @@ SPCFSImpl::SPCFSImpl(WorldBase& world) :
 
     isConstraintForceOutputMode = false;
     is2Dmode = false;
-    
+
     penaltyKpCoef = 1.;
     penaltyKvCoef = 1.;
-
+    penaltySizeRatio = 0.05;
+    
     pSPCore = new SPCore(maxNumGaussSeidelIteration, gaussSeidelErrorCriterion);
 }
 
@@ -447,6 +443,7 @@ void SPCFSImpl::initBody(const DyBodyPtr& body, BodyData& bodyData)
         DyLink* link = body->link(i);
         linksData[link->index()].link = link;
         linksData[link->index()].parentIndex = link->parent() ? link->parent()->index() : -1;
+        linksData[link->index()].penaltySpringCount = 0;
     }
 }
 
@@ -592,6 +589,7 @@ void SPCFSImpl::initialize(void)
                 LinkData& linkData = linksData[j];
                 linkData.dw.setZero();
                 linkData.dvo.setZero();
+                linkData.penaltySpringCount = 0;
             }
         }
 
@@ -619,10 +617,16 @@ inline void SPCFSImpl::clearExternalForces()
 {
     for(size_t i=0; i < bodiesData.size(); ++i){
         BodyData& bodyData = bodiesData[i];
-       // if(bodyData.hasConstrainedLinks){
+       // if(bodyData.hasConstrainedLinks){ // WHY WAS THIS HERE?
             bodyData.body->clearExternalForces();
        // }
+        const int n = bodyData.body->numLinks();
+        for(int j=0; j < n; ++j){
+            bodiesData[i].linksData[j].penaltySpringCount = 0;
+            bodiesData[i].body->link(j)->constraintForces().clear();
+        }
     }
+
 }
 
 
@@ -756,10 +760,23 @@ void SPCFSImpl::extractConstraintPoints(const CollisionPair& collisionPair)
             const int linkIndex = id - bodyData.geometryId;
             linkPair.link[i] = bodyData.body->link(linkIndex);
             linkPair.linkData[i] = &bodyData.linksData[linkIndex];
-            if(linkPair.isPenaltyBased)
-            {
-               linkPair.linkData[i]->penaltySpringCount ++ ;
-            }
+        }
+        if(linkPair.isPenaltyBased)
+        {
+          Vector3 sz0 = linkPair.linkData[0]->link->shape()->boundingBox().max()
+                       -linkPair.linkData[0]->link->shape()->boundingBox().min() ;
+          Vector3 sz1 = linkPair.linkData[1]->link->shape()->boundingBox().max()
+                       -linkPair.linkData[1]->link->shape()->boundingBox().min() ;
+          double minsize = kkwmin(kkwmin(sz0),kkwmin(sz1));
+          const vector<Collision>& collisions = collisionPair.collisions;
+          for(size_t j=0; j < collisions.size(); ++j){
+            if(penaltySizeRatio * minsize < collisions[j].depth ) linkPair.isPenaltyBased = false;
+          }
+        }
+        if(linkPair.isPenaltyBased)
+        {
+           linkPair.linkData[0]->penaltySpringCount ++ ;
+           linkPair.linkData[1]->penaltySpringCount ++ ;
         }
         linkPair.isSameBodyPair = (linkPair.bodyIndex[0] == linkPair.bodyIndex[1]);
         linkPair.isNonContactConstraint = false;
@@ -1042,8 +1059,8 @@ void SPCFSImpl::initMatrices()
     an0.resize(n);
     at0.resize(m);
   
-    pSPCore->kik_DeleteBuffer();
-    pSPCore->kik_NewBuffer(Mlcp.rows());
+    pSPCore->DeleteBuffer();
+    pSPCore->NewBuffer(Mlcp.rows());
 
 }
 
@@ -1759,8 +1776,8 @@ double SPConstraintForceSolver::coefficientOfRestitution() const
 void SPConstraintForceSolver::setGaussSeidelErrorCriterion(double e)
 {
     impl->gaussSeidelErrorCriterion = e;
-    impl->pSPCore-> kik_solops->dparam[0]                  = e;
-    impl->pSPCore-> kik_solops->internalSolvers->dparam[0] = e;
+    impl->pSPCore-> solops->dparam[0]                  = e;
+    impl->pSPCore-> solops->internalSolvers->dparam[0] = e;
 }
 
 
@@ -1773,8 +1790,8 @@ double SPConstraintForceSolver::gaussSeidelErrorCriterion()
 void SPConstraintForceSolver::setGaussSeidelMaxNumIterations(int n)
 {
     impl->maxNumGaussSeidelIteration = n;
-    impl->pSPCore-> kik_solops->iparam[0]                  = n;
-    impl->pSPCore-> kik_solops->internalSolvers->iparam[0] = n;
+    impl->pSPCore-> solops->iparam[0]                  = n;
+    impl->pSPCore-> solops->internalSolvers->iparam[0] = n;
 }
 
 
@@ -1791,17 +1808,25 @@ void SPConstraintForceSolver::setContactDepthCorrection(double depth, double vel
 }
 
 
+void SPConstraintForceSolver::setPenaltySizeRatio(double aSizeRatio)
+{
+    impl->penaltySizeRatio = aSizeRatio;
+}
+double SPConstraintForceSolver::penaltySizeRatio()
+{
+    return impl->penaltySizeRatio;
+}
 void SPConstraintForceSolver::setPenaltyKpCoef(double aKpCoef)
 {
     impl->penaltyKpCoef = aKpCoef;
 }
-void SPConstraintForceSolver::setPenaltyKvCoef(double aKvCoef)
-{
-    impl->penaltyKvCoef = aKvCoef;
-}
 double SPConstraintForceSolver::penaltyKpCoef()
 {
     return impl->penaltyKpCoef;
+}
+void SPConstraintForceSolver::setPenaltyKvCoef(double aKvCoef)
+{
+    impl->penaltyKvCoef = aKvCoef;
 }
 double SPConstraintForceSolver::penaltyKvCoef()
 {

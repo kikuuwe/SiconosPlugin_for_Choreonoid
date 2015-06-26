@@ -40,76 +40,76 @@ using namespace cnoid;
 SPCore::SPCore(int maxNumGaussSeidelIteration, double gaussSeidelErrorCriterion)
 {
     USE_FULL_MATRIX = true;
-    kik_prob      = new FrictionContactProblem;
-    kik_numops    = new NumericsOptions       ;
-    kik_solops    = new SolverOptions         ;
-    kik_prob->dimension     = 3;
-    kik_prob->M             = new NumericsMatrix;
-    kik_prob->M->matrix1    = new SparseBlockStructuredMatrix;
-    kik_prob->q             = 0;
-    kik_numops->verboseMode = 0;  /*************/
+    prob      = new FrictionContactProblem;
+    numops    = new NumericsOptions       ;
+    solops    = new SolverOptions         ;
+    prob->dimension     = 3;
+    prob->M             = new NumericsMatrix;
+    prob->M->matrix1    = new SparseBlockStructuredMatrix;
+    prob->q             = 0;
+    numops->verboseMode = 0;  /*************/
 //  SICONOS_FRICTION_3D_projectionOnCylinder;
-    frictionContact3D_setDefaultSolverOptions(kik_solops, SICONOS_FRICTION_3D_NSGS   );
-//  kik_solops->iparam[1] = 1; // This makes computation slower
-    kik_solops->iparam[0] = maxNumGaussSeidelIteration;
-    kik_solops->dparam[0] = gaussSeidelErrorCriterion;//1e-10;
-    kik_solops->internalSolvers->iparam[0] = maxNumGaussSeidelIteration;
-    kik_solops->internalSolvers->dparam[0] = gaussSeidelErrorCriterion;
+    frictionContact3D_setDefaultSolverOptions(solops, SICONOS_FRICTION_3D_NSGS   );
+//  solops->iparam[1] = 1; // This makes computation slower
+    solops->iparam[0] = maxNumGaussSeidelIteration;
+    solops->dparam[0] = gaussSeidelErrorCriterion;//1e-10;
+    solops->internalSolvers->iparam[0] = maxNumGaussSeidelIteration;
+    solops->internalSolvers->dparam[0] = gaussSeidelErrorCriterion;
 }
 
 SPCore::~SPCore()
 {
-    kik_DeleteBuffer();
-    deleteSolverOptions(kik_solops);
-    delete  kik_solops ;
-    delete  kik_prob->M ->matrix1;
-    delete  kik_prob->M     ;
-    delete  kik_prob     ;
-    delete  kik_numops   ;
+    DeleteBuffer();
+    deleteSolverOptions(solops);
+    delete  solops ;
+    delete  prob->M ->matrix1;
+    delete  prob->M     ;
+    delete  prob     ;
+    delete  numops   ;
 }
 
-void SPCore::kik_NewBuffer(int NC)
+void SPCore::NewBuffer(int NC)
 {
   if(NC<=0){return;}
   int NC3= 3*NC;
   
   if( USE_FULL_MATRIX )
   {
-    kik_prob->q          = new double   [NC3 + NC + NC3 + NC3 + NC3 * NC3];
-    kik_prob->mu         = &(kik_prob->q[NC3                  ]);
-    kik_reaction         = &(kik_prob->q[NC3 + NC             ]);
-    kik_velocity         = &(kik_prob->q[NC3 + NC + NC3       ]);
-    kik_prob->M->matrix0 = &(kik_prob->q[NC3 + NC + NC3 + NC3 ]);
-    for(int i=0;i<NC3 + NC + NC3 + NC3 + NC3 * NC3;i++) kik_prob->q[i]=0;
+    prob->q          = new double   [NC3 + NC + NC3 + NC3 + NC3 * NC3];
+    prob->mu         = &(prob->q[NC3                  ]);
+    reaction         = &(prob->q[NC3 + NC             ]);
+    velocity         = &(prob->q[NC3 + NC + NC3       ]);
+    prob->M->matrix0 = &(prob->q[NC3 + NC + NC3 + NC3 ]);
+    for(int i=0;i<NC3 + NC + NC3 + NC3 + NC3 * NC3;i++) prob->q[i]=0;
   }
   else
   {
-    kik_prob->M->matrix1->block      = new double*[NC*NC  ];
-    kik_prob->M->matrix1->index1_data= new size_t [NC+1+NC*NC];
-    kik_prob->M->matrix1->blocksize0 = new unsigned int[NC]; 
-    kik_prob->q                      = new double  [NC3 + NC + NC3 + NC3  + NC3 * NC3];
-    kik_prob->mu                     = &(kik_prob->q[NC3                  ]);
-    kik_reaction                     = &(kik_prob->q[NC3 + NC             ]);
-    kik_velocity                     = &(kik_prob->q[NC3 + NC + NC3       ]);
-    kik_prob->M->matrix1->block[0]    = &(kik_prob->q[NC3 + NC + NC3 + NC3 ]);
-    for(int i=0;i<NC3 + NC + NC3 + NC3  + NC3 * NC3;i++) kik_prob->q[i]=0;
+    prob->M->matrix1->block      = new double*[NC*NC  ];
+    prob->M->matrix1->index1_data= new size_t [NC+1+NC*NC];
+    prob->M->matrix1->blocksize0 = new unsigned int[NC]; 
+    prob->q                      = new double  [NC3 + NC + NC3 + NC3  + NC3 * NC3];
+    prob->mu                     = &(prob->q[NC3                  ]);
+    reaction                     = &(prob->q[NC3 + NC             ]);
+    velocity                     = &(prob->q[NC3 + NC + NC3       ]);
+    prob->M->matrix1->block[0]    = &(prob->q[NC3 + NC + NC3 + NC3 ]);
+    for(int i=0;i<NC3 + NC + NC3 + NC3  + NC3 * NC3;i++) prob->q[i]=0;
   }
 }
-void SPCore::kik_DeleteBuffer()
+void SPCore::DeleteBuffer()
 {
-  if(kik_prob->q==0) return;
+  if(prob->q==0) return;
   if( USE_FULL_MATRIX )
   {
-    delete [] kik_prob->q          ;
+    delete [] prob->q          ;
   }
   else
   {
-    delete [] kik_prob->M->matrix1->block;
-    delete [] kik_prob->M->matrix1->blocksize0;
-    delete [] kik_prob->M->matrix1->index1_data;
-    delete [] kik_prob->q          ;
+    delete [] prob->M->matrix1->block;
+    delete [] prob->M->matrix1->blocksize0;
+    delete [] prob->M->matrix1->index1_data;
+    delete [] prob->q          ;
   }
-  kik_prob->q = 0;
+  prob->q = 0;
 }
 
 bool SPCore::callSiconosSolver(MatrixX& Mlcp, VectorX& b, VectorX& solution, VectorX& contactIndexToMu, ofstream& os)
@@ -125,16 +125,16 @@ bool SPCore::callSiconosSolver(MatrixX& Mlcp, VectorX& b, VectorX& solution, Vec
     if(       b.rows()!= NC3){ os << "   warning-2 " << std::endl;return false;}
     if(solution.rows()!= NC3){ os << "   warning-3 " << std::endl;return false;}
   } 
-  for(int ia=0;ia<NC;ia++)for(int i=0;i<3;i++)kik_prob->q [3*ia+i]= b(((i==0)?(ia):(2*ia+i+NC-1)));
-  for(int ia=0;ia<NC;ia++)                    kik_prob->mu[  ia  ]= contactIndexToMu[ia];
-  kik_prob->numberOfContacts = NC;
+  for(int ia=0;ia<NC;ia++)for(int i=0;i<3;i++)prob->q [3*ia+i]= b(((i==0)?(ia):(2*ia+i+NC-1)));
+  for(int ia=0;ia<NC;ia++)                    prob->mu[  ia  ]= contactIndexToMu[ia];
+  prob->numberOfContacts = NC;
 
   if( USE_FULL_MATRIX )
   {
-    kik_prob->M->storageType = 0;
-    kik_prob->M->size0       = NC3;
-    kik_prob->M->size1       = NC3;
-    double* ptmp = kik_prob->M->matrix0 ;
+    prob->M->storageType = 0;
+    prob->M->size0       = NC3;
+    prob->M->size1       = NC3;
+    double* ptmp = prob->M->matrix0 ;
     for(int ia=0;ia<NC;ia++)for(int i =0;i <3 ;i ++)
     {
       for(int ja=0;ja<NC;ja++)for(int j =0;j <3;j ++) 
@@ -145,27 +145,24 @@ bool SPCore::callSiconosSolver(MatrixX& Mlcp, VectorX& b, VectorX& solution, Vec
   }
   else
   {
-    kik_prob->M->storageType = 1;
-    kik_prob->M->size0       = NC3;
-    kik_prob->M->size1       = NC3;
-    SPGlobal_sparsify_A( kik_prob->M->matrix1 , Mlcp , NC , &os);
+    prob->M->storageType = 1;
+    prob->M->size0       = NC3;
+    prob->M->size1       = NC3;
+    SPGlobal_sparsify_A( prob->M->matrix1 , Mlcp , NC , &os);
   }
   
-  frictionContact3D_driver(kik_prob,kik_reaction,kik_velocity,kik_solops, kik_numops);
+  frictionContact3D_driver(prob,reaction,velocity,solops, numops);
   
-  double* prea = kik_reaction ;
+  double* prea = reaction ;
   for(int ia=0;ia<NC;ia++)for(int i=0;i<3;i++) solution(((i==0)?(ia):(2*ia+i+NC-1))) = prea[3*ia+i] ;
   if(CFS_DEBUG_VERBOSE)
   {
     os << "=---------------------------------="<< std::endl; 
-    os << "| res_error =" << kik_solops->dparam[1] <<  std::endl;
+    os << "| res_error =" << solops->dparam[1] <<  std::endl;
     os << "=---------------------------------="<< std::endl; 
   }
   return true;
 }
-
-
-
 
 void SPCore::SPGlobal_sparsify_A(SparseBlockStructuredMatrix* pmat, MatrixX& Mlcp, int NC, ofstream* pos )
 {
