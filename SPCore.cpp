@@ -72,42 +72,32 @@ void SPCore::NewBuffer(int NC)
 {
   if(NC<=0){return;}
   int NC3= 3*NC;
-  
+  prob->q                      = new double  [NC3 + NC + NC3 + NC3 + NC3 * NC3];
+  for(int i=0;i<NC3 + NC + NC3 + NC3 + NC3 * NC3;i++) prob->q[i]=0;
+  prob->mu                     = &(prob->q[NC3                  ]);
+  reaction                     = &(prob->q[NC3 + NC             ]);
+  velocity                     = &(prob->q[NC3 + NC + NC3       ]);
   if( USE_FULL_MATRIX )
   {
-    prob->q          = new double   [NC3 + NC + NC3 + NC3 + NC3 * NC3];
-    prob->mu         = &(prob->q[NC3                  ]);
-    reaction         = &(prob->q[NC3 + NC             ]);
-    velocity         = &(prob->q[NC3 + NC + NC3       ]);
     prob->M->matrix0 = &(prob->q[NC3 + NC + NC3 + NC3 ]);
-    for(int i=0;i<NC3 + NC + NC3 + NC3 + NC3 * NC3;i++) prob->q[i]=0;
   }
   else
   {
     prob->M->matrix1->block      = new double*[NC*NC  ];
     prob->M->matrix1->index1_data= new size_t [NC+1+NC*NC];
     prob->M->matrix1->blocksize0 = new unsigned int[NC]; 
-    prob->q                      = new double  [NC3 + NC + NC3 + NC3  + NC3 * NC3];
-    prob->mu                     = &(prob->q[NC3                  ]);
-    reaction                     = &(prob->q[NC3 + NC             ]);
-    velocity                     = &(prob->q[NC3 + NC + NC3       ]);
-    prob->M->matrix1->block[0]    = &(prob->q[NC3 + NC + NC3 + NC3 ]);
-    for(int i=0;i<NC3 + NC + NC3 + NC3  + NC3 * NC3;i++) prob->q[i]=0;
+    prob->M->matrix1->block[0]   = &(prob->q[NC3 + NC + NC3 + NC3 ]);
   }
 }
 void SPCore::DeleteBuffer()
 {
   if(prob->q==0) return;
-  if( USE_FULL_MATRIX )
-  {
-    delete [] prob->q          ;
-  }
-  else
+  delete [] prob->q          ;
+  if(! USE_FULL_MATRIX )
   {
     delete [] prob->M->matrix1->block;
     delete [] prob->M->matrix1->blocksize0;
     delete [] prob->M->matrix1->index1_data;
-    delete [] prob->q          ;
   }
   prob->q = 0;
 }

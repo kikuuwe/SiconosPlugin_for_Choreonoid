@@ -377,6 +377,7 @@ public:
 
     static Vector3 kkwsat(double a, const Vector3& x)
     {
+      if(a<=0.)  return Vector3::Zero() ;
       double xnrm2 =  x.dot(x);
       if(a*a >=  xnrm2 ) return x;
       return x * (a/sqrt(xnrm2));
@@ -746,6 +747,7 @@ void SPCFSImpl::extractConstraintPoints(const CollisionPair& collisionPair)
     if(p != geometryPairToLinkPairMap.end()){
         pLinkPair = &p->second;
         pLinkPair->constraintPoints.clear();
+        pLinkPair->isPenaltyBased = false; 
     } else {
         LinkPair& linkPair = geometryPairToLinkPairMap.insert(make_pair(idPair, LinkPair())).first->second;
         linkPair.isPenaltyBased = false; 
@@ -1047,7 +1049,6 @@ void SPCFSImpl::initMatrices()
 
     const int dimLCP = n + m;
 
-    int prv_sz = Mlcp.rows();
     Mlcp.resize(dimLCP, dimLCP);
     b   .resize(dimLCP);
     solution.resize(dimLCP);
@@ -1909,14 +1910,13 @@ void SPCFSImpl::addPenaltyForceToLink(LinkPair* linkPair, int ipair)
         double kp = ( minM/(T*T*maxN)/200    ) * penaltyKpCoef ;
         double kd = ( 2.* sqrt( minM * kp)/5 ) * penaltyKvCoef ;
         Vector3  n = constraint.normalTowardInside[ipair];
-        Vector3  f = (constraint.depth * kp ) * n ;
-        if(ipair==0) f += constraint.relVelocityOn0 * kd ;
-        else         f -= constraint.relVelocityOn0 * kd ;
-        Vector3  velt = constraint.relVelocityOn0 - n* n.dot(constraint.relVelocityOn0) ;
-        if(ipair==0) f += velt * (kp*T) ;
-        else         f -= velt * (kp*T) ;
-        double depth_d = ((ipair==0)?(1.):(-1.))* n.dot(constraint.relVelocityOn0) ;
-        if(depth_d * T > constraint.depth ) f += n* (kp* (depth_d *  T -constraint.depth)) ;
+        Vector3  v = ((ipair==0)?(1.):(-1.))* constraint.relVelocityOn0;
+        double   v_n =  n.dot(v) ;
+        Vector3  v_t =  v  - n* v_n ;
+        //  p = p + v*T
+        //  v =     v + a*T
+        Vector3  f = (constraint.depth * kp + v_n * (kp*T+kd)) * n ;
+                 f +=                         v_t * (kp*T+kd)      ;
         double fn = f.dot(n);
         double mu = linkPair->muDynamic;
         f =  n * kkwmax(fn,0) + kkwsat( mu*fn, f - n * fn) ;
